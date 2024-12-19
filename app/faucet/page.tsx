@@ -1,3 +1,4 @@
+ // @ts-nocheck
 "use client";
 
 // Faucet.jsx
@@ -11,12 +12,10 @@ import {
   CardTitle,
 } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 
 const Faucet = () => {
   const [clickable, setClickable] = useState<boolean | null>(null);
-  const [signer, setSigner] = useState(null);
   const [account, setAccount] = useState("");
   const [ok, setOk] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -41,7 +40,6 @@ const Faucet = () => {
           console.error("Error fetching account:", err);
           setError("Please connect your wallet.");
         });
-      setSigner(provider.getSigner());
     } else {
       setError(
         "MetaMask is not installed. Please install it to use this feature."

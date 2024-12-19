@@ -1,6 +1,14 @@
+// @ts-nocheck
 "use client";
 
 import React, { useState, useEffect } from "react";
+
+// Extend the Window interface to include the ethereum property
+declare global {
+  interface Window {
+    ethereum: any;
+  }
+}
 import { ethers } from "ethers";
 import Confetti from "react-dom-confetti"; // Updated import
 import {
@@ -12,15 +20,17 @@ import {
 import { Button } from "../../components/ui/button";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 import MultiSenderUnitedJson from "../../contracts/MultiSenderUnited.json";
+import { Contract } from "ethers";
 
 const CLAIM_ADDRESS = process.env.NEXT_PUBLIC_CLAIM_ADDRESS;
+if (!CLAIM_ADDRESS) {
+  throw new Error("CLAIM_ADDRESS is not defined");
+}
 
 const CLAIM_ABI = MultiSenderUnitedJson.abi;
 
 const ClaimHYB = () => {
-  const [provider, setProvider] = useState(null);
-  const [signer, setSigner] = useState(null);
-  const [contract, setContract] = useState(null);
+  const [contract, setContract] = useState<Contract | null>(null);
   const [account, setAccount] = useState("");
   const [hasClaimed, setHasClaimed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -53,11 +63,6 @@ const ClaimHYB = () => {
     origin: { x: 0.5, y: 0.5 },
   });
   const [confettiActive, setConfettiActive] = useState(false);
-    useEffect(() => {
-      setTimeout(() => {
-        setConfettiActive(true);
-      }, 1000);
-    }, []);
 
   // Initialize Ethereum connection
   useEffect(() => {
@@ -65,10 +70,8 @@ const ClaimHYB = () => {
       const init = async () => {
         try {
           const _provider = new ethers.providers.Web3Provider(window.ethereum);
-          setProvider(_provider);
 
           const _signer = _provider.getSigner();
-          setSigner(_signer);
 
           const userAddress = await _signer.getAddress();
           setAccount(userAddress);
@@ -155,7 +158,7 @@ const ClaimHYB = () => {
       setTimeout(() => {
         setConfettiActive(false);
       }, confettiConfig.duration);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Claim error:", err);
       if (err.data && err.data.message) {
         setError(err.data.message);

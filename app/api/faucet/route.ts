@@ -22,10 +22,17 @@ export async function POST(request: NextRequest) {
   const body: Claim = await request.json();
   const recipientAddress = body.address;
 
-  await addAddress(recipientAddress);
+  try {
+    await addAddress(recipientAddress);
 
-  return NextResponse.json(
-    { ok: true, message: "Transcation added in Queue." },
-    { status: 200 }
-  );
+    return NextResponse.json(
+      { ok: true, message: "Transcation added in Queue." },
+      { status: 200 }
+    );
+  } catch (error: any) {
+    return NextResponse.json(
+      { ok: false, message: error.message },
+      { status: 500 }
+    );
+  }
 }

@@ -331,19 +331,27 @@ const MultiBetDApp = () => {
       setLoading(true);
       setError("");
       
+      console.log('Updating bet count...');
+      if (contract) {
+        const count = await contract.betCount();
+        const newCount = Number(count);
+        console.log('New bet count:', newCount);
+        setBetCount(newCount);
+        
+        // 가장 최근 베팅으로 currentBetId 업데이트
+        if (newCount > 0) {
+          const latestBetId = newCount - 1;
+          setCurrentBetId(latestBetId);
+          console.log('Updated to latest bet:', latestBetId);
+        }
+      }
+  
       console.log('Refreshing current bet details...');
       await loadBetDetails();
       
       console.log('Updating token information...');
       if (tokenContract && account) {
         await updateTokenInfo(tokenContract, account, CONTRACT_ADDRESS);
-      }
-      
-      console.log('Updating bet count...');
-      if (contract) {
-        const count = await contract.betCount();
-        console.log('New bet count:', Number(count));
-        setBetCount(Number(count));
       }
       
       console.log('Data refresh completed successfully');

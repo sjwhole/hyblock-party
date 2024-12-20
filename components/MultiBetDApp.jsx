@@ -1,34 +1,30 @@
 "use client";
-//MultiBetDapp.jsx
 
 import React, { useState, useEffect } from "react";
 import { ethers } from "ethers";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Alert, AlertDescription } from "../components/ui/alert";
+import TokenDashboard from './TokenDashboard';  // Import the TokenDashboard component
+
+// 컨트랙트 주소와 ABI import
 import MultiBetExpJson from "../contracts/MultiBetExp.json";
 import HYBLOCKTokenJson from "../contracts/HYBLOCKToken.json";
 
+// 환경 변수에서 컨트랙트 주소 가져오기
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
 const TOKEN_ADDRESS = process.env.NEXT_PUBLIC_TOKEN_ADDRESS;
 
+// ABI 설정
 const CONTRACT_ABI = MultiBetExpJson.abi;
-console.log(CONTRACT_ADDRESS);
-console.log(CONTRACT_ABI);
 const TOKEN_ABI = HYBLOCKTokenJson.abi;
 
 const MultiBetDApp = () => {
+  // Web3 states
   const [provider, setProvider] = useState(null);
   const [signer, setSigner] = useState(null);
   const [contract, setContract] = useState(null);
   const [tokenContract, setTokenContract] = useState(null);
   const [account, setAccount] = useState("");
+  
+  // App states
   const [isOwner, setIsOwner] = useState(false);
   const [betCount, setBetCount] = useState(0);
   const [currentBetId, setCurrentBetId] = useState(0);
@@ -37,87 +33,108 @@ const MultiBetDApp = () => {
   const [error, setError] = useState("");
   const [tokenBalance, setTokenBalance] = useState("0");
   const [isApproved, setIsApproved] = useState(null);
-  const [nickname, setNickname] = useState("");
-  const [newNickname, setNewNickname] = useState("");
 
-  // New bet state
+  // Betting states
   const [newBetTopic, setNewBetTopic] = useState("");
   const [newBetOptions, setNewBetOptions] = useState("");
-
-  // Place bet state
   const [selectedOption, setSelectedOption] = useState("");
   const [betAmount, setBetAmount] = useState("");
+  // 활성/비활성 베팅 분리를 위한 상태 추가
+  const [viewMode, setViewMode] = useState('active'); // 'active' or 'resolved'
+  const [activeBets, setActiveBets] = useState([]);
+  const [resolvedBets, setResolvedBets] = useState([]);
+  
+  const handleError = (error, context) => {
+    console.error(`Error in ${context}:`, error);
+    if (error.message.includes("user rejected transaction")) {
+      setError("Transaction was rejected");
+    } else {
+      setError(`Operation failed: ${error.message}`);
+    }
+  };
 
   useEffect(() => {
-    (async () => {
-      const accounts = await ethereum.request({ method: "eth_accounts" });
-      if (accounts.length === 0) return;
-
-      setAccount(accounts[0]);
-      const userAddress = accounts[0];
-
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
-
-      const contract = new ethers.Contract(
-        CONTRACT_ADDRESS,
-        CONTRACT_ABI,
-        signer
-      );
-      const tokenContract = new ethers.Contract(
-        TOKEN_ADDRESS,
-        TOKEN_ABI,
-        signer
-      );
-
-      setProvider(provider);
-      setSigner(signer);
-      setContract(contract);
-      setTokenContract(tokenContract);
-
-      // Check if connected account is owner
-      const contractOwner = await contract.owner();
-      setIsOwner(contractOwner.toLowerCase() === userAddress.toLowerCase());
-
-      // Get current bet count
-      const count = await contract.betCount();
-      setBetCount(Number(count));
-
-      // Get token balance and allowance
-      await updateTokenInfo(tokenContract, userAddress, contract.address);
-
-      const holeskyChainId = "0x4268";
-      if (window.ethereum.chainId !== holeskyChainId) {
-        // First try to switch to Holesky if it exists
-        await window.ethereum.request({
-          // method: "wallet_switchEthereumChain",
-          method: "wallet_addEthereumChain",
-          params: [holeskyNetwork],
-        });
-        window.location.reload();
+    const initializeContracts = async () => {
+      try {
+        if (!window.ethereum) {
+          setError("Please install MetaMask!");
+          return;
+        }
+  
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+        
+        try {
+          const accounts = await window.ethereum.request({ method: "eth_accounts" });
+          if (accounts.length > 0) {
+            setAccount(accounts[0]);
+            
+            const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+            const tokenContract = new ethers.Contract(TOKEN_ADDRESS, TOKEN_ABI, signer);
+            
+            setProvider(provider);
+            setSigner(signer);
+            setContract(contract);
+            setTokenContract(tokenContract);
+  
+            // Load initial data
+            await Promise.all([
+              updateTokenInfo(tokenContract, accounts[0], CONTRACT_ADDRESS),
+              loadBetDetails(contract),
+              (async () => {
+                const contractOwner = await contract.owner();
+                setIsOwner(contractOwner.toLowerCase() === accounts[0].toLowerCase());
+                const count = await contract.betCount();
+                setBetCount(Number(count));
+              })()
+            ]);
+  
+            // Check and setup Holesky network
+            const holeskyChainId = "0x4268";
+            if (window.ethereum.chainId !== holeskyChainId) {
+              await window.ethereum.request({
+                method: "wallet_addEthereumChain",
+                params: [holeskyNetwork],
+              });
+              window.location.reload();
+            }
+  
+            // Setup event listeners
+            provider.on("network", (newNetwork, oldNetwork) => {
+              if (oldNetwork) {
+                window.location.reload();
+              }
+            });
+            window.ethereum.on("chainChanged", () => window.location.reload());
+            window.ethereum.on("accountsChanged", (accounts) => {
+              if (accounts.length === 0) {
+                setAccount("");
+                setIsOwner(false);
+              } else {
+                connectWallet();
+              }
+            });
+          }
+        } catch (err) {
+          handleError(err, "initialization");
+        }
+      } catch (err) {
+        handleError(err, "provider setup");
       }
-
-      provider.on("network", (newNetwork, oldNetwork) => {
-        if (oldNetwork) {
-          window.location.reload();
-        }
-      });
-      window.ethereum.on("chainChanged", () => window.location.reload());
-      window.ethereum.on("accountsChanged", (accounts) => {
-        if (accounts.length === 0) {
-          setAccount("");
-          setIsOwner(false);
-        } else {
-          connectWallet();
-        }
-      });
-    })();
-  }, [account]);
+    };
+  
+    initializeContracts();
+    
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeAllListeners();
+      }
+    };
+  }, []);
 
   const connectWallet = async () => {
     try {
       if (window.ethereum) {
-        // Holesky testnet configuration
         const provider = new ethers.providers.Web3Provider(window.ethereum);
         const signer = provider.getSigner();
         const accounts = await ethereum.request({ method: "eth_accounts" });
@@ -143,16 +160,13 @@ const MultiBetDApp = () => {
 
         try {
           if (window.ethereum.chainId !== holeskyChainId) {
-            // First try to switch to Holesky if it exists
             await window.ethereum.request({
-              // method: "wallet_switchEthereumChain",
               method: "wallet_addEthereumChain",
               params: [holeskyNetwork],
             });
             window.location.reload();
           }
         } catch (switchError) {
-          // If Holesky network doesn't exist, add it
           try {
             await window.ethereum.request({
               method: "wallet_addEthereumChain",
@@ -193,77 +207,126 @@ const MultiBetDApp = () => {
     try {
       setLoading(true);
       setError("");
-
-      // Double check if already approved
-      const currentAllowance = await tokenContract.allowance(
-        account,
-        CONTRACT_ADDRESS
-      );
-      if (currentAllowance.gt(0)) {
-        setIsApproved(true);
-        return;
+  
+      // allowance 체크를 try-catch로 감싸서 에러 처리
+      try {
+        const currentAllowance = await tokenContract.allowance(
+          account,
+          CONTRACT_ADDRESS
+        );
+        
+        if (currentAllowance && currentAllowance.gt(0)) {
+          console.log("Already approved");
+          setIsApproved(true);
+          return;
+        }
+      } catch (allowanceErr) {
+        console.warn("Error checking allowance:", allowanceErr);
+        // allowance 체크 실패시 approve 진행
       }
-
-      // Set approval for maximum possible amount
+  
+      // approve 트랜잭션 실행
       const maxAmount = ethers.constants.MaxUint256;
       console.log("Requesting token approval...");
-      const tx = await tokenContract.approve(CONTRACT_ADDRESS, maxAmount);
-
+      
+      // 가스 제한 명시적 설정
+      const gasEstimate = await tokenContract.estimateGas.approve(CONTRACT_ADDRESS, maxAmount);
+      const tx = await tokenContract.approve(CONTRACT_ADDRESS, maxAmount, {
+        gasLimit: gasEstimate.mul(120).div(100) // 20% 버퍼 추가
+      });
+  
       console.log("Waiting for approval transaction...");
       const receipt = await tx.wait();
-
+  
       if (receipt.status === 1) {
         console.log("Token approval successful");
         setIsApproved(true);
-        // Update token info after successful approval
-        await updateTokenInfo(tokenContract, account, CONTRACT_ADDRESS);
+        
+        // 성공 후 토큰 정보 업데이트 시도
+        try {
+          await updateTokenInfo(tokenContract, account, CONTRACT_ADDRESS);
+        } catch (updateErr) {
+          console.warn("Error updating token info after approval:", updateErr);
+        }
       } else {
         throw new Error("Token approval transaction failed");
       }
     } catch (err) {
       console.error("Token approval error:", err);
-      setError(err.message || "Failed to approve token usage");
+      let errorMessage = "Failed to approve token usage";
+      
+      // MetaMask 사용자 거부 에러 처리
+      if (err.code === 4001) {
+        errorMessage = "Transaction rejected by user";
+      } else if (err.message) {
+        errorMessage = `Approval failed: ${err.message}`;
+      }
+      
+      setError(errorMessage);
       setIsApproved(false);
     } finally {
       setLoading(false);
     }
   };
 
+  // loadBetDetails 함수 수정
   const loadBetDetails = async () => {
     try {
       setLoading(true);
+      setError("");
 
-      let foundActiveBet = false;
-      let currentId = currentBetId;
-
-      while (currentId < betCount && !foundActiveBet) {
-        const bet = await contract.getBet(currentId);
+      // 먼저 모든 활성화된 bet의 ID를 찾습니다
+      let activeCount = 0;
+      let activeBetIds = [];
+      
+      for (let i = 0; i < betCount; i++) {
+        const bet = await contract.getBet(i);
         if (!bet.isResolved) {
-          foundActiveBet = true;
-          const optionInfos = await contract.getBetOptionInfos(currentId);
-
-          setBetDetails({
-            topic: bet.topic,
-            isResolved: bet.isResolved,
-            totalAmount: ethers.utils.formatEther(bet.totalAmount),
-            winningOption: bet.winningOption,
-            options: optionInfos.options,
-            optionBets: optionInfos.optionBets.map((amount) =>
-              ethers.utils.formatEther(amount)
-            ),
-          });
-
-          if (currentId !== currentBetId) {
-            setCurrentBetId(currentId);
-          }
-        } else {
-          currentId++;
+          activeCount++;
+          activeBetIds.push(i);
         }
       }
 
-      if (!foundActiveBet) {
+      setActiveBets(activeBetIds);
+
+      // 활성화된 bet이 없는 경우
+      if (activeBetIds.length === 0) {
         setBetDetails(null);
         setError("No active bets available");
+        return;
+      }
+
+      // 현재 선택된 betId가 활성화된 bet이 아니면 첫 번째 활성화된 bet으로 이동
+      if (!activeBetIds.includes(currentBetId)) {
+        setCurrentBetId(activeBetIds[0]);
+        const bet = await contract.getBet(activeBetIds[0]);
+        const optionInfos = await contract.getBetOptionInfosWithNicknames(activeBetIds[0]);
+        
+        setBetDetails({
+          topic: bet.topic,
+          isResolved: bet.isResolved,
+          totalAmount: ethers.utils.formatEther(bet.totalAmount),
+          winningOption: bet.winningOption,
+          options: optionInfos.options,
+          optionBets: optionInfos.optionBets.map((amount) =>
+            ethers.utils.formatEther(amount)
+          ),
+        });
+      } else {
+        // 현재 선택된 bet의 정보를 로드
+        const bet = await contract.getBet(currentBetId);
+        const optionInfos = await contract.getBetOptionInfosWithNicknames(currentBetId);
+        
+        setBetDetails({
+          topic: bet.topic,
+          isResolved: bet.isResolved,
+          totalAmount: ethers.utils.formatEther(bet.totalAmount),
+          winningOption: bet.winningOption,
+          options: optionInfos.options,
+          optionBets: optionInfos.optionBets.map((amount) =>
+            ethers.utils.formatEther(amount)
+          ),
+        });
       }
     } catch (err) {
       setError(err.message);
@@ -272,7 +335,21 @@ const MultiBetDApp = () => {
     }
   };
 
-  // Create new bet
+  // 네비게이션 버튼 클릭 핸들러 수정
+  const handlePreviousBet = () => {
+    const currentIndex = activeBets.indexOf(currentBetId);
+    if (currentIndex > 0) {
+      setCurrentBetId(activeBets[currentIndex - 1]);
+    }
+  };
+
+  const handleNextBet = () => {
+    const currentIndex = activeBets.indexOf(currentBetId);
+    if (currentIndex < activeBets.length - 1) {
+      setCurrentBetId(activeBets[currentIndex + 1]);
+    }
+  };
+
   const createBet = async () => {
     try {
       if (!isOwner) {
@@ -332,7 +409,6 @@ const MultiBetDApp = () => {
     }
   };
 
-  // Resolve bet
   const resolveBet = async (winningOption) => {
     try {
       if (!isOwner) {
@@ -352,7 +428,6 @@ const MultiBetDApp = () => {
     }
   };
 
-  // Clear error after 5 seconds
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => {
@@ -362,247 +437,287 @@ const MultiBetDApp = () => {
     }
   }, [error]);
 
-  // Load bet details when contract or currentBetId changes
   useEffect(() => {
     if (contract && currentBetId < betCount) {
       loadBetDetails();
     }
   }, [contract, currentBetId, betCount]);
 
-  // Function to fetch the user's nickname from the contract
-  const fetchNickname = async () => {
-    try {
-      if (contract && account) {
-        const nick = await contract.get_nickname();
-        setNickname(nick);
-      }
-    } catch (err) {
-      console.error("Error fetching nickname:", err);
-    }
-  };
-
-  // Function to set a new nickname in the contract
-  const updateNickname = async () => {
-    try {
-      if (!newNickname) {
-        setError("Please enter a nickname");
-        return;
-      }
-      setLoading(true);
-      const tx = await contract.set_nickname(newNickname);
-      await tx.wait();
-      setNickname(newNickname);
-      setNewNickname("");
-    } catch (err) {
-      console.error("Error setting nickname:", err);
-      setError(err.message || "Failed to set nickname");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="max-w-4xl mx-auto p-4">
-      <Card className="mb-4">
-        <CardHeader>
-          <CardTitle>MultiBet DApp</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className="mb-4 bg-white rounded-lg shadow-md">
+        <div className="p-4 border-b border-gray-200">
+          <h2 className="text-xl font-semibold">
+            {activeBets.length > 0 
+              ? `Active Bet (${activeBets.indexOf(currentBetId) + 1} of ${activeBets.length})`
+              : "Active Bets"
+            }
+          </h2>
+        </div>
+        <div className="p-4">
           {!account ? (
-            <Button onClick={connectWallet}>Connect Wallet</Button>
+            <div className="text-center">
+              <button
+                onClick={connectWallet}
+                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 shadow-md transition-all duration-200"
+              >
+                Connect Wallet
+              </button>
+              <p className="mt-2 text-sm text-gray-600">Connect your wallet to start betting</p>
+            </div>
           ) : (
             <div className="space-y-4">
-              <div className="flex flex-col gap-2">
-                <div className="text-sm">Connected: {account}</div>
-                <div className="text-sm font-semibold">
-                  Token Balance: {tokenBalance} HYBLOCK
-                </div>
-                <div className="text-sm">
-                  Token Approval Status:{" "}
-                  {isApproved ? (
-                    <span className="text-green-600 font-semibold">
-                      Approved ✓
-                    </span>
-                  ) : isApproved === false ? (
-                    <span className="text-red-600 font-semibold">
-                      Not Approved
-                    </span>
-                  ) : (
-                    <span className="text-yellow-600 font-semibold">
-                      Checking...
-                    </span>
-                  )}
-                </div>
-                {/* Display current nickname */}
-                {nickname ? (
-                  <div className="text-sm">
-                    Your Nickname: <strong>{nickname}</strong>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                  <div className="text-sm text-gray-600">Wallet Address</div>
+                  <div className="text-sm font-medium">
+                    {`${account.slice(0, 6)}...${account.slice(-4)}`}
                   </div>
-                ) : (
-                  <div className="text-sm">
-                    You have not set a nickname yet.
-                  </div>
-                )}
-                {/* Input to set a new nickname */}
-                <div className="flex items-center space-x-2">
-                  <Input
-                    placeholder="Enter new nickname"
-                    value={newNickname}
-                    onChange={(e) => setNewNickname(e.target.value)}
-                    disabled={loading}
-                  />
-                  <Button onClick={updateNickname} disabled={loading}>
-                    {loading ? "Setting..." : "Set Nickname"}
-                  </Button>
                 </div>
-              </div>
-              {!isApproved && (
-                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                  <p className="text-sm text-yellow-800 mb-3">
-                    Before placing bets, you need to approve the smart contract
-                    to use your HYBLOCK tokens. This is a one-time approval.
-                  </p>
-                  <Button
-                    onClick={approveToken}
-                    disabled={loading}
-                    className="w-full bg-yellow-500 hover:bg-yellow-600"
-                  >
-                    {loading ? "Approving..." : "Approve HYBLOCK Token Usage"}
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        
+        <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+          <div className="text-sm text-gray-600">Token Balance</div>
+          <div className="text-sm font-semibold text-blue-600">
+            {tokenBalance} HYBLOCK
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+          <div className="text-sm text-gray-600">Approval Status</div>
+          <div>
+            {isApproved ? (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+                Approved
+              </span>
+            ) : isApproved === false ? (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                Not Approved
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
+                <svg className="animate-spin h-4 w-4 mr-1.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Checking
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {!isApproved && (
+        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 p-4 rounded-lg border border-yellow-200 shadow-sm">
+          <div className="flex items-start mb-3">
+            <svg className="w-5 h-5 text-yellow-700 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm text-yellow-800">
+              To participate in betting, you need to approve HYBLOCK token usage. 
+              This is a one-time approval for the smart contract.
+            </p>
+          </div>
+          <button
+            onClick={approveToken}
+            disabled={loading}
+            className="w-full px-4 py-2.5 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg 
+                     hover:from-yellow-600 hover:to-orange-600 disabled:opacity-50 transition-all duration-200
+                     shadow-md disabled:cursor-not-allowed font-medium"
+          >
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Approving...
+              </span>
+            ) : (
+              "Approve HYBLOCK Token Usage"
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  )}
+</div>
+      </div>
 
       {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <div className="mb-4 p-4 bg-red-100 border border-red-200 rounded-md">
+          <p className="text-sm text-red-600">{error}</p>
+        </div>
       )}
 
       {account && (
         <>
           {isOwner && (
-            <Card className="mb-4">
-              <CardHeader>
-                <CardTitle>Create New Bet</CardTitle>
-              </CardHeader>
-              <CardContent>
+            <div className="mb-4 bg-white rounded-lg shadow-md">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="text-xl font-semibold">Create New Bet</h2>
+              </div>
+              <div className="p-4">
                 <div className="space-y-4">
-                  <Input
+                  <input
+                    type="text"
                     placeholder="Bet Topic"
                     value={newBetTopic}
                     onChange={(e) => setNewBetTopic(e.target.value)}
                     disabled={loading}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   />
-                  <Input
+                  <input
+                    type="text"
                     placeholder="Options (comma-separated)"
                     value={newBetOptions}
                     onChange={(e) => setNewBetOptions(e.target.value)}
                     disabled={loading}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
                   />
-                  <Button onClick={createBet} disabled={loading}>
+                  <button
+                    onClick={createBet}
+                    disabled={loading}
+                    className="w-full px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50"
+                  >
                     {loading ? "Creating..." : "Create Bet"}
-                  </Button>
+                  </button>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
 
-          <Card className="mb-4">
-            <CardHeader>
-              <CardTitle>
+          <TokenDashboard 
+            contract={contract}
+            tokenContract={tokenContract}
+            account={account}
+            provider={provider}
+          />
+
+          <div className="mb-4 bg-white rounded-lg shadow-md">
+            <div className="p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold">
                 Current Bet ({currentBetId + 1} of {betCount})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+              </h2>
+            </div>
+            <div className="p-4">
               <div className="space-y-4">
                 <div className="flex space-x-2">
-                  <Button
+                  <button
                     onClick={() =>
                       setCurrentBetId((prev) => Math.max(0, prev - 1))
                     }
                     disabled={currentBetId === 0 || loading}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50"
                   >
                     Previous
-                  </Button>
-                  <Button
+                  </button>
+                  <button
                     onClick={() =>
                       setCurrentBetId((prev) =>
                         Math.min(betCount - 1, prev + 1)
                       )
                     }
                     disabled={currentBetId >= betCount - 1 || loading}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50"
                   >
                     Next
-                  </Button>
+                  </button>
                 </div>
 
                 {betDetails && (
-                  <div className="space-y-2">
-                    <p className="font-semibold">Topic: {betDetails.topic}</p>
-                    <p>Total Amount: {betDetails.totalAmount} HYB</p>
-                    <p>
-                      Status: {betDetails.isResolved ? "Resolved" : "Active"}
-                    </p>
-                    {betDetails.isResolved && (
-                      <p className="font-semibold">
-                        Winning Option: {betDetails.winningOption}
+                  <div className="space-y-4">
+                    <div className="border-b border-gray-200 pb-4">
+                      <p className="text-xl font-semibold text-gray-900">Topic: {betDetails.topic}</p>
+                      <p className="text-sm text-gray-600">Total Amount: {betDetails.totalAmount} HYB</p>
+                      <p className="text-sm text-gray-600">
+                        Status: {" "}
+                        <span className={betDetails.isResolved ? "text-red-600" : "text-green-600"}>
+                          {betDetails.isResolved ? "Resolved" : "Active"}
+                        </span>
                       </p>
-                    )}
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {betDetails.options.map((option, index) => (
-                        <div key={index} className="p-2 border rounded">
-                          <p className="font-medium">{option}</p>
-                          <p className="text-sm">
-                            {betDetails.optionBets[index]} HYB
-                          </p>
-                        </div>
-                      ))}
+                      {betDetails.isResolved && (
+                        <p className="text-sm font-semibold text-blue-600">
+                          Winning Option: {betDetails.winningOption}
+                        </p>
+                      )}
                     </div>
 
-                    {!betDetails.isResolved && (
-                      <div className="space-y-2 mt-4">
-                        <select
-                          className="w-full p-2 border rounded"
-                          value={selectedOption}
-                          onChange={(e) => setSelectedOption(e.target.value)}
-                          disabled={loading}
-                        >
-                          <option value="">Select Option</option>
-                          {betDetails.options.map((option, index) => (
-                            <option key={index} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                        <Input
-                          type="number"
-                          placeholder="Bet Amount (ETH)"
-                          value={betAmount}
-                          onChange={(e) => setBetAmount(e.target.value)}
-                          disabled={loading}
-                        />
-                        <Button
-                          onClick={placeBet}
-                          disabled={loading || !selectedOption || !betAmount}
-                          className="w-full"
-                        >
-                          {loading ? "Processing..." : "Place Bet"}
-                        </Button>
+                    <div className="space-y-3">
+                      {betDetails.options.map((option, index) => {
+                        const totalAmount = parseFloat(betDetails.totalAmount);
+                        const optionAmount = parseFloat(betDetails.optionBets[index]);
+                        const percentage = totalAmount > 0 
+                          ? ((optionAmount / totalAmount) * 100).toFixed(0)
+                          : "0";
+                          
+                        return (
+                          <div 
+                            key={index} 
+                            onClick={() => !betDetails.isResolved && setSelectedOption(option)}
+                            className={`p-4 border rounded-lg cursor-pointer transition-all duration-200 hover:shadow-md ${
+                              selectedOption === option 
+                                ? 'border-blue-500 bg-blue-50' 
+                                : 'border-gray-200 hover:border-blue-300'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center mb-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <h3 className="text-lg font-medium text-gray-900">{option}</h3>
+                                  {selectedOption === option && (
+                                    <span className="text-blue-600 text-sm">Selected</span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-600">{betDetails.optionBets[index]} HYB Vol.</p>
+                              </div>
+                              <div className="text-3xl font-bold text-gray-900">
+                                {percentage}%
+                              </div>
+                            </div>
+                            <div className="w-full bg-gray-100 rounded-full h-2">
+                              <div 
+                                className="bg-blue-600 h-2 rounded-full transition-all duration-500" 
+                                style={{ width: `${percentage}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {!betDetails.isResolved && selectedOption && (
+                      <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="number"
+                            placeholder="Bet Amount (HYB)"
+                            value={betAmount}
+                            onChange={(e) => setBetAmount(e.target.value)}
+                            disabled={loading}
+                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <button
+                            onClick={placeBet}
+                            disabled={loading || !selectedOption || !betAmount}
+                            className="px-6 py-2 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {loading ? "Processing..." : "Place Bet"}
+                          </button>
+                        </div>
+                        <p className="mt-2 text-sm text-gray-600">
+                          Selected option: {selectedOption}
+                        </p>
                       </div>
                     )}
 
                     {isOwner && !betDetails.isResolved && (
-                      <div className="space-y-2 mt-4">
+                      <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                         <select
-                          className="w-full p-2 border rounded"
-                          onChange={(e) =>
-                            e.target.value && resolveBet(e.target.value)
-                          }
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          onChange={(e) => e.target.value && resolveBet(e.target.value)}
                           disabled={loading}
                         >
                           <option value="">Select Winning Option</option>
@@ -617,8 +732,8 @@ const MultiBetDApp = () => {
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </>
       )}
     </div>

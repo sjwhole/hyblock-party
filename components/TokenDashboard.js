@@ -33,6 +33,14 @@ const TokenDashboard = ({ contract, tokenContract, account, provider, refreshAll
       
       console.log('Starting full refresh...');
       
+      if (!contract) {
+        throw new Error("Contract not initialized");
+      }
+      
+      // Get new bet count first
+      const newCount = await contract.betCount();
+      console.log('New bet count:', newCount);
+      
       // 토큰 랭킹 업데이트
       await updateUsersList();
       

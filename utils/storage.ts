@@ -1,73 +1,60 @@
 import { Address } from "web3";
-import fs from "fs/promises";
 
-const CLAIMED_ADDRESSES_FILE = "claimedAddresses.json";
+// Using a Set for efficient storage and lookup of unique addresses
+const claimedAddresses: Set<string> = new Set();
 
-const isAddressAdded = async (address: Address): Promise<boolean> => {
-  try {
-    const data = await fs.readFile(CLAIMED_ADDRESSES_FILE, "utf-8");
-    const json = JSON.parse(data);
-    return json.addresses.includes(address.toLowerCase());
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return false;
-    }
-    throw error;
-  }
-}
-
-// Function to add an address to the claimed list
-const addAddress = async (address: Address): Promise<void> => {
-  let json;
-  try {
-    const data = await fs.readFile(CLAIMED_ADDRESSES_FILE, "utf-8");
-    json = JSON.parse(data);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      json = { addresses: [] };
-    } else {
-      throw error;
-    }
-  }
-
-  // Ensure addresses are stored in lowercase for consistency
-  if (!json.addresses.includes(address.toLowerCase())) {
-    json.addresses.push(address.toLowerCase());
-    await fs.writeFile(CLAIMED_ADDRESSES_FILE, JSON.stringify(json, null, 2));
-  }
+/**
+ * Checks if an address has already been added to the claimed list.
+ * @param address - The Ethereum address to check.
+ * @returns `true` if the address is claimed, otherwise `false`.
+ */
+const isAddressAdded = (address: Address): boolean => {
+  const lowerAddress = address.toLowerCase();
+  return claimedAddresses.has(lowerAddress);
 };
 
-const getAddresses = async (): Promise<Address[]> => {
-  try {
-    const data = await fs.readFile(CLAIMED_ADDRESSES_FILE, "utf-8");
-    const json = JSON.parse(data);
-    return json.addresses;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return [];
-    }
-    throw error;
+/**
+ * Adds an address to the claimed list.
+ * @param address - The Ethereum address to add.
+ * @returns `true` if the address was added, `false` if it was already claimed.
+ */
+const addAddress = (address: Address): boolean => {
+  const lowerAddress = address.toLowerCase();
+
+  if (claimedAddresses.has(lowerAddress)) {
+    console.log(`Address ${lowerAddress} is already in the claimed list.`);
+    return false;
   }
+
+  claimedAddresses.add(lowerAddress);
+  console.log(`Address ${lowerAddress} has been added to the claimed list.`);
+  return true;
 };
 
-// const removeClaimedAddress = async (address: Address): Promise<void> => {
-//   let json;
-//   try {
-//     const data = await fs.readFile(CLAIMED_ADDRESSES_FILE, "utf-8");
-//     json = JSON.parse(data);
-//   } catch (error) {
-//     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-//       // File doesn't exist, no one has claimed yet
-//       return;
-//     }
-//     throw error;
-//   }
+/**
+ * Retrieves all claimed addresses.
+ * @returns An array of claimed Ethereum addresses.
+ */
+const getAddresses = (): Address[] => {
+  return Array.from(claimedAddresses) as Address[];
+};
 
-//   const index = json.addresses.indexOf(address.toLowerCase());
-//   if (index !== -1) {
-//     json.addresses.splice(index, 1);
-//     await fs.writeFile(CLAIMED_ADDRESSES_FILE, JSON.stringify(json, null, 2));
-//   }
-// };
+/**
+ * Optional: Removes an address from the claimed list.
+ * Uncomment and use as needed.
+ */
+/*
+const removeClaimedAddress = (address: Address): boolean => {
+  const lowerAddress = address.toLowerCase();
+  
+  if (claimedAddresses.delete(lowerAddress)) {
+    console.log(`Address ${lowerAddress} has been removed from the claimed list.`);
+    return true;
+  } else {
+    console.log(`Address ${lowerAddress} was not found in the claimed list.`);
+    return false;
+  }
+};
+*/
 
-export { isAddressAdded, addAddress, getAddresses };
+export { isAddressAdded, addAddress, getAddresses /*, removeClaimedAddress */ };

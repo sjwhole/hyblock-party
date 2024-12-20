@@ -109,7 +109,7 @@ const contractABI = [
 const CONTRACT_ADDRESS = "0xaD7e1Fb9c1e94A53A6A37A4dAEe9eaf4C05d24D0";
 
 async function sendMultiEth() {
-  const addresses = await getAddresses();
+  const addresses = getAddresses();
   const contract = new web3.eth.Contract(contractABI, CONTRACT_ADDRESS);
 
   const txReceipt = await contract.methods.multiSendETH(addresses).send({

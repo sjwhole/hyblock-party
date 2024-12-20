@@ -1,4 +1,4 @@
- // @ts-nocheck
+// @ts-nocheck
 "use client";
 
 // Faucet.jsx
@@ -14,12 +14,16 @@ import {
 import { Button } from "../../components/ui/button";
 import { Alert, AlertDescription } from "../../components/ui/alert";
 
+const OWNER_ADDRESS =
+  "0x88145c40a92B6bd91c12df9e88EC86EfFceC7c2d".toLowerCase();
+
 const Faucet = () => {
   const [clickable, setClickable] = useState<boolean | null>(null);
   const [account, setAccount] = useState("");
   const [ok, setOk] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [addresses, setAddresses] = useState([]);
 
   useEffect(() => {
     if (window.ethereum) {
@@ -65,6 +69,44 @@ const Faucet = () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ address: account }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.ok) {
+        setOk(true);
+      } else {
+        throw new Error(data.message || "Failed to process faucet request.");
+      }
+    } catch (err) {
+      console.error("Faucet error:", err);
+      setError(err.message || "An unexpected error occurred.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getAddresses = async () => {
+    try {
+      const data = await fetch("/api/faucet/multi");
+      const { addresses } = await data.json();
+      setAddresses(addresses);
+    } catch (err) {
+      console.error("Error fetching addresses:", err);
+    }
+  };
+
+  const postMultiSend = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      setOk(false);
+
+      const response = await fetch("/api/faucet/multi", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
 
       const data = await response.json();
@@ -140,6 +182,36 @@ const Faucet = () => {
           )}
         </CardContent>
       </Card>
+      {account.toLowerCase() === OWNER_ADDRESS && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Owner Controls</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={getAddresses}
+              className="w-full bg-blue-500 hover:bg-blue-600 mb-3"
+            >
+              Fetch Addresses
+            </Button>
+            {addresses.length > 0 && (
+              <ol>
+                {addresses.map((address, idx) => (
+                  <li key={address}>
+                    {idx + 1}: {address}
+                  </li>
+                ))}
+              </ol>
+            )}
+            <Button
+              onClick={postMultiSend}
+              className="w-full bg-blue-500 hover:bg-blue-600 mt-3"
+            >
+              send Eths
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

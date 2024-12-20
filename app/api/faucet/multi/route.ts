@@ -11,7 +11,7 @@ export async function GET() {
 
 export async function POST() {
   try {
-    await sendMultiEth();
+    sendMultiEth();
     return NextResponse.json(
       { ok: true, message: "Transcation added in Queue." },
       { status: 200 }

@@ -24,6 +24,7 @@ const Faucet = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [addresses, setAddresses] = useState([]);
+  const [sent, setSent] = useState(false);
 
   useEffect(() => {
     if (window.ethereum) {
@@ -113,6 +114,7 @@ const Faucet = () => {
 
       if (response.ok && data.ok) {
         setOk(true);
+        setSent(true);
       } else {
         throw new Error(data.message || "Failed to process faucet request.");
       }
@@ -209,6 +211,14 @@ const Faucet = () => {
             >
               send Eths
             </Button>
+            {sent && ( // Show success message if the transaction was successful
+              <Alert variant="success" className="mt-4">
+                <AlertDescription>
+                  Transaction added to the queue. You will receive 0.1 ETH
+                  shortly.
+                </AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
       )}

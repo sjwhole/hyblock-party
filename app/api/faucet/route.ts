@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET(request: NextRequest) {
   // address?=param
   const address = request.nextUrl.searchParams.get("address") ?? "";
-  if (isAddressAdded(address)) {
+  if (await isAddressAdded(address)) {
     return NextResponse.json(
       { ok: false, message: "Address is already added." },
       { status: 200 }
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   const recipientAddress = body.address;
 
   try {
-    addAddress(recipientAddress);
+    await addAddress(recipientAddress);
 
     return NextResponse.json(
       { ok: true, message: "Transcation added in Queue." },

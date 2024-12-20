@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
+import RankingTable from './RankingTable';
 
-const TokenDashboard = ({ contract, tokenContract, account, provider }) => {
+const TokenDashboard = ({ contract, tokenContract, account, provider, refreshAllData }) => {
   const [users, setUsers] = useState([]);
   const [newNickname, setNewNickname] = useState('');
   const [userNickname, setUserNickname] = useState('');
@@ -22,6 +23,33 @@ const TokenDashboard = ({ contract, tokenContract, account, provider }) => {
       }
     } catch (err) {
       console.error('Error in fetchNickname:', err.message || err);
+    }
+  };
+
+  const handleRefresh = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      console.log('Starting full refresh...');
+      
+      // 토큰 랭킹 업데이트
+      await updateUsersList();
+      
+      // 베팅 정보 업데이트
+      if (refreshAllData) {
+        console.log('Refreshing betting information...');
+        await refreshAllData();
+      } else {
+        console.warn('refreshAllData function not provided');
+      }
+      
+      console.log('Refresh completed');
+    } catch (err) {
+      console.error('Error in handleRefresh:', err);
+      setError('Failed to refresh data. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -176,7 +204,7 @@ const TokenDashboard = ({ contract, tokenContract, account, provider }) => {
   return (
     <div className="w-full mb-4 bg-white rounded-lg shadow-md">
       <div className="p-4 border-b border-gray-200">
-        <h2 className="text-xl font-semibold text-gray-800">Token Rankings & Nickname</h2>
+        <h2 className="text-xl font-semibold text-gray-800">Ranking</h2>
       </div>
       
       <div className="p-4 space-y-4">
@@ -212,62 +240,19 @@ const TokenDashboard = ({ contract, tokenContract, account, provider }) => {
           </div>
         )}
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Rank
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Nickname
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Address
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Token Balance
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {users.map((user, index) => (
-                <tr 
-                  key={user.address}
-                  className={user.address.toLowerCase() === account?.toLowerCase() ? "bg-blue-50" : ""}
-                >
-                  <td className="px-4 py-3 text-sm text-gray-900">
-                    {index + 1}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-900">
-                    {user.nickname}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {`${user.address.slice(0, 6)}...${user.address.slice(-4)}`}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right text-gray-900">
-                    {parseFloat(user.balance).toFixed(2)} HYBLOCK
-                  </td>
-                </tr>
-              ))}
-              {users.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-3 text-sm text-center text-gray-500">
-                    No users found with registered nicknames
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <RankingTable 
+          users={users}
+          account={account}
+          loading={loading}
+        />
 
         <div className="mt-4 flex justify-end">
           <button
-            onClick={updateUsersList}
+            onClick={handleRefresh}
             disabled={loading}
             className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
           >
-            {loading ? "Refreshing..." : "Refresh Rankings"}
+            {loading ? "Refreshing..." : "Refresh Data"}
           </button>
         </div>
       </div>

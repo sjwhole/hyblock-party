@@ -338,17 +338,21 @@ const MultiBetDApp = () => {
         console.log('New bet count:', newCount);
         setBetCount(newCount);
         
-        // 항상 가장 최근 베팅을 보여주도록 currentBetId 업데이트
-        if (newCount > 0) {
+        // 현재 보고 있는 베팅 ID가 유효한지 확인
+        if (currentBetId >= newCount) {
+          // 현재 베팅 ID가 유효하지 않은 경우에만 최근 베팅으로 이동
           const latestBetId = newCount - 1;
           setCurrentBetId(latestBetId);
           console.log('Updated to latest bet:', latestBetId);
-          
-          // 즉시 베팅 상세 정보 로드
-          await loadBetDetails();
+        } else {
+          // 현재 베팅 ID가 유효한 경우 해당 베팅 정보 업데이트
+          console.log('Refreshing current bet:', currentBetId);
         }
+        
+        // 베팅 상세 정보 로드
+        await loadBetDetails();
       }
-  
+
       console.log('Updating token information...');
       if (tokenContract && account) {
         await updateTokenInfo(tokenContract, account, CONTRACT_ADDRESS);

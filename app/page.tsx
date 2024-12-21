@@ -80,8 +80,6 @@ export default function Home() {
           <h2 className="text-3xl font-bold mb-6">Follow Us on Instagram</h2>
           <div className="flex flex-col items-center space-y-2 mb-4">
             <p className="text-xl font-semibold">@hyblock_kr</p>
-            <p className="text-gray-600">Joined September 2022</p>
-            <p className="text-gray-600">18 Following | 56 Followers</p>
           </div>
           <a
             href="https://instagram.com/hyblock_kr"
